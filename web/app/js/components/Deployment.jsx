@@ -1,6 +1,8 @@
 import _ from 'lodash';
+import { ApiHelpers } from './util/ApiHelpers.js';
 import BarChart from './BarChart.jsx';
 import ConduitSpinner from "./ConduitSpinner.jsx";
+import ErrorBanner from './ErrorBanner.jsx';
 import HealthPane from './HealthPane.jsx';
 import Metric from './Metric.jsx';
 import React from 'react';
@@ -16,6 +18,7 @@ import 'whatwg-fetch';
 export default class Deployment extends React.Component {
   constructor(props) {
     super(props);
+    this.api = ApiHelpers(this.props.pathPrefix);
     this.loadFromServer = this.loadFromServer.bind(this);
     this.state = this.initialState(this.props.location);
   }
@@ -51,7 +54,8 @@ export default class Deployment extends React.Component {
       downstreamMetrics: [],
       downstreamTsByDeploy: {},
       pendingRequests: false,
-      loaded: false
+      loaded: false,
+      error: ''
     };
   }
 
@@ -70,13 +74,13 @@ export default class Deployment extends React.Component {
     let downstreamRollupUrl = `${metricsUrl}&aggregation=target_deploy&source_deploy=${this.state.deploy}`;
     let downstreamTimeseriesUrl = `${downstreamRollupUrl}&timeseries=true`;
 
-    let deployFetch = fetch(deployMetricsUrl).then(r => r.json());
-    let podFetch = fetch(podRollupUrl).then(r => r.json());
-    let podTsFetch = fetch(podTimeseriesUrl).then(r => r.json());
-    let upstreamFetch = fetch(upstreamRollupUrl).then(r => r.json());
-    let upstreamTsFetch = fetch(upstreamTimeseriesUrl).then(r => r.json());
-    let downstreamFetch = fetch(downstreamRollupUrl).then(r => r.json());
-    let downstreamTsFetch = fetch(downstreamTimeseriesUrl).then(r => r.json());
+    let deployFetch = this.api.fetch(deployMetricsUrl);
+    let podFetch = this.api.fetch(podRollupUrl);
+    let podTsFetch = this.api.fetch(podTimeseriesUrl);
+    let upstreamFetch = this.api.fetch(upstreamRollupUrl);
+    let upstreamTsFetch = this.api.fetch(upstreamTimeseriesUrl);
+    let downstreamFetch = this.api.fetch(downstreamRollupUrl);
+    let downstreamTsFetch = this.api.fetch(downstreamTimeseriesUrl);
 
     Promise.all([deployFetch, podFetch, podTsFetch, upstreamFetch, upstreamTsFetch, downstreamFetch, downstreamTsFetch])
       .then(([deployMetrics, podRollup, podTimeseries, upstreamRollup, upstreamTimeseries, downstreamRollup, downstreamTimeseries]) => {
@@ -104,9 +108,14 @@ export default class Deployment extends React.Component {
           pendingRequests: false,
           loaded: true
         });
-      }).catch(() => {
-        this.setState({ pendingRequests: false });
-      });
+      }).catch(this.handleApiError);
+  }
+
+  handleApiError(e) {
+    this.setState({
+      pendingRequests: false,
+      error: `Error getting data from server: ${e.message}`
+    });
   }
 
   numUpstreams() {
@@ -188,24 +197,17 @@ export default class Deployment extends React.Component {
     );
   }
 
-  renderContent() {
-    if (_.isEmpty(this.state.metrics)) {
-      return <div>No data</div>;
-    } else {
-      return this.renderSections();
-    }
-  }
-
   render() {
     if (!this.state.loaded) {
       return <ConduitSpinner />;
     } else return (
       <div className="page-content deployment-detail">
+        { !this.state.error ? null : <ErrorBanner message={this.state.error} /> }
         <div className="page-header">
           <div className="subsection-header">Deployment detail</div>
           <h1>{this.state.deploy}</h1>
         </div>
-        {this.renderContent()}
+        {this.renderSections()}
       </div>
     );
   }

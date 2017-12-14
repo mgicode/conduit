@@ -146,6 +146,10 @@ func (h *handler) handleApiMetrics(w http.ResponseWriter, req *http.Request, p h
 		return
 	}
 
+	// if rand.Float32() > 0.5 {
+	// 	renderJsonError(w, errors.New("Metrics error"), http.StatusInternalServerError)
+	// 	return
+	// }
 	renderJsonPb(w, metricsResponse)
 }
 
@@ -155,6 +159,11 @@ func (h *handler) handleApiPods(w http.ResponseWriter, req *http.Request, p http
 		renderJsonError(w, err, http.StatusInternalServerError)
 		return
 	}
+
+	// if rand.Float32() > 0.5 {
+	// 	renderJsonError(w, errors.New("Pods error"), http.StatusInternalServerError)
+	// 	return
+	// }
 
 	renderJsonPb(w, pods)
 }

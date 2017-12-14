@@ -149,3 +149,7 @@ tr th.numeric, .numeric {
 .border-container.border-neutral {
   background-image: url(./../img/grey_check.png);
 }
+
+.error-message-container {
+  margin-bottom: 24px;
+}

@@ -1,4 +1,5 @@
 import _ from 'lodash';
+import { ApiHelpers } from './util/ApiHelpers.js';
 import ConduitSpinner from "./ConduitSpinner.jsx";
 import HealthPane from './HealthPane.jsx';
 import React from 'react';
@@ -10,6 +11,7 @@ import 'whatwg-fetch';
 export default class PodDetail extends React.Component {
   constructor(props) {
     super(props);
+    this.api = ApiHelpers(this.props.pathPrefix);
     this.loadFromServer = this.loadFromServer.bind(this);
     this.state = this.initialState(this.props.location);
   }
@@ -62,11 +64,11 @@ export default class PodDetail extends React.Component {
     let downstreamRollupUrl = `${metricsUrl}&aggregation=target_pod&source_pod=${this.state.pod}`;
     let downstreamTimeseriesUrl = `${downstreamRollupUrl}&timeseries=true`;
 
-    let podFetch = fetch(podMetricsUrl).then(r => r.json());
-    let upstreamFetch = fetch(upstreamRollupUrl).then(r => r.json());
-    let upstreamTsFetch = fetch(upstreamTimeseriesUrl).then(r => r.json());
-    let downstreamFetch = fetch(downstreamRollupUrl).then(r => r.json());
-    let downstreamTsFetch = fetch(downstreamTimeseriesUrl).then(r => r.json());
+    let podFetch = this.api.fetch(podMetricsUrl);
+    let upstreamFetch =  this.api.fetch(upstreamRollupUrl);
+    let upstreamTsFetch =  this.api.fetch(upstreamTimeseriesUrl);
+    let downstreamFetch =  this.api.fetch(downstreamRollupUrl);
+    let downstreamTsFetch =  this.api.fetch(downstreamTimeseriesUrl);
 
     Promise.all([podFetch, upstreamFetch, upstreamTsFetch, downstreamFetch, downstreamTsFetch])
       .then(([podMetrics, upstreamRollup, upstreamTimeseries, downstreamRollup, downstreamTimeseries]) => {

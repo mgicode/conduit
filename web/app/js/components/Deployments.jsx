@@ -1,7 +1,9 @@
 import _ from 'lodash';
+import { ApiHelpers } from './util/ApiHelpers.js';
 import CallToAction from './CallToAction.jsx';
 import ConduitSpinner from "./ConduitSpinner.jsx";
 import DeploymentSummary from './DeploymentSummary.jsx';
+import ErrorBanner from './ErrorBanner.jsx';
 import React from 'react';
 import { rowGutter } from './util/Utils.js';
 import TabbedMetricsTable from './TabbedMetricsTable.jsx';
@@ -14,8 +16,10 @@ const maxTsToFetch = 15; // Beyond this, stop showing sparklines in table
 export default class Deployments extends React.Component {
   constructor(props) {
     super(props);
+    this.api = ApiHelpers(this.props.pathPrefix);
     this.loadFromServer = this.loadFromServer.bind(this);
     this.loadTimeseriesFromServer = this.loadTimeseriesFromServer.bind(this);
+    this.handleApiError = this.handleApiError.bind(this);
 
     this.state = {
       metricsWindow: "10m",
@@ -25,7 +29,8 @@ export default class Deployments extends React.Component {
       lastUpdated: 0,
       limitSparklineData: false,
       pendingRequests: false,
-      loaded: false
+      loaded: false,
+      error: ''
     };
   }
 
@@ -66,14 +71,11 @@ export default class Deployments extends React.Component {
     }
     this.setState({ pendingRequests: true });
 
-    let rollupPath = `${this.props.pathPrefix}/api/metrics?window=${this.state.metricsWindow}`;
-    let podPath = `${this.props.pathPrefix}/api/pods`;
-    let rollupRequest = fetch(rollupPath).then(r => r.json());
-
-    let podRequest = fetch(podPath).then(r => r.json());
+    let rollupRequest = this.api.fetchRollup(this.state.metricsWindow);
+    let podsRequest = this.api.fetchPods(this.props.pathPrefix);
 
     // expose serverPromise for testing
-    this.serverPromise = Promise.all([rollupRequest, podRequest])
+    this.serverPromise = Promise.all([rollupRequest, podsRequest])
       .then(([rollup, p]) => {
         let poByDeploy = this.getDeploymentList(p.pods);
         let meshDeploys = processRollupMetrics(rollup.metrics, "targetDeploy");
@@ -81,22 +83,19 @@ export default class Deployments extends React.Component {
 
         this.loadTimeseriesFromServer(meshDeploys, combinedMetrics);
       })
-      .catch(() => {
-        this.setState({ pendingRequests: false });
-      });
+      .catch(this.handleApiError);
   }
 
   loadTimeseriesFromServer(meshDeployMetrics, combinedMetrics) {
     let limitSparklineData = _.size(meshDeployMetrics) > maxTsToFetch;
-
-    let rollupPath = `${this.props.pathPrefix}/api/metrics?window=${this.state.metricsWindow}`;
-    let timeseriesPath = `${rollupPath}&timeseries=true`;
+    let timeseriesPath = this.api.timeseriesPath(this.state.metricsWindow);
 
     let updatedState = {
       metrics: combinedMetrics,
       limitSparklineData: limitSparklineData,
       loaded: true,
-      pendingRequests: false
+      pendingRequests: false,
+      error: ''
     };
 
     if (limitSparklineData) {
@@ -105,7 +104,7 @@ export default class Deployments extends React.Component {
 
       let tsPromises = _.map(leastHealthyDeployments, dep => {
         let tsPathForDeploy = `${timeseriesPath}&target_deploy=${dep.name}`;
-        return fetch(tsPathForDeploy).then(r => r.json());
+        return this.api.fetch(tsPathForDeploy);
       });
       Promise.all(tsPromises)
         .then(tsMetrics => {
@@ -118,23 +117,25 @@ export default class Deployments extends React.Component {
             timeseriesByDeploy: tsByDeploy,
             lastUpdated: Date.now(),
           }));
-        }).catch(() => {
-          this.setState({ pendingRequests: false });
-        });
+        }).catch(this.handleApiError);
     } else {
       // fetch timeseries for all deploys
-      fetch(timeseriesPath)
-        .then(r => r.json())
+      this.api.fetch(timeseriesPath)
         .then(ts => {
           let tsByDeploy = processTimeseriesMetrics(ts.metrics, "targetDeploy");
           this.setState(_.merge({}, updatedState, {
             timeseriesByDeploy: tsByDeploy,
             lastUpdated: Date.now()
           }));
-        }).catch(() => {
-          this.setState({ pendingRequests: false });
-        });
+        }).catch(this.handleApiError);
     }
+  }
+
+  handleApiError(e) {
+    this.setState({
+      pendingRequests: false,
+      error: `Error getting data from server: ${e.message}`
+    });
   }
 
   getLeastHealthyDeployments(deployMetrics, limit = 3) {
@@ -181,9 +182,13 @@ export default class Deployments extends React.Component {
 
   render() {
     if (!this.state.loaded) {
-      return <ConduitSpinner />;
+      return (<div>
+        { !this.state.error ? null : <ErrorBanner message={this.state.error} /> }
+        <ConduitSpinner />
+      </div>);
     } else return (
       <div className="page-content">
+        { !this.state.error ? null : <ErrorBanner message={this.state.error} /> }
         <div className="page-header">
           <h1>All deployments</h1>
         </div>
