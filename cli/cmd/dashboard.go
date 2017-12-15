@@ -18,7 +18,7 @@ var dashboardCmd = &cobra.Command{
 	Use:   "dashboard [flags]",
 	Short: "Open the Conduit dashboard in a web browser",
 	Long:  "Open the Conduit dashboard in a web browser.",
-	RunE: func(cmd *cobra.Command, args []string) error {
+	Run: exitSilentlyOnError(func(cmd *cobra.Command, args []string) error {
 		if proxyPort <= 0 {
 			log.Fatalf("port must be positive, was %d", proxyPort)
 		}
@@ -59,7 +59,7 @@ var dashboardCmd = &cobra.Command{
 		}
 
 		return nil
-	},
+	}),
 }
 
 func init() {
